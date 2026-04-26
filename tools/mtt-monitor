@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""
+mtt-monitor — Real-time MTT S30 GPU monitor
+Reads from /proc/sgpu_km/ and /sys/class/drm/card*/device/
+Displays a live dashboard similar to nvidia-smi / nvtop
+
+Usage:
+    mtt-monitor              # live TUI (refreshes every 1s)
+    mtt-monitor --once       # print once and exit (like nvidia-smi)
+    mtt-monitor --json       # JSON output (for scripting)
+    mtt-monitor --interval N # set refresh interval in seconds
+"""
+
+import os
+import sys
+import time
+import json
+import argparse
+import glob
+import signal
+
+# ── ANSI colours ─────────────────────────────────────────────────────────────
+R  = "\033[0;31m"
+G  = "\033[0;32m"
+Y  = "\033[1;33m"
+B  = "\033[0;34m"
+C  = "\033[0;36m"
+W  = "\033[1;37m"
+DIM= "\033[2m"
+NC = "\033[0m"
+CLEAR = "\033[2J\033[H"
+
+VENDOR_ID = "0x1ed5"
+PROC_ROOT = "/proc/sgpu_km"
+SYS_DRM   = "/sys/class/drm"
+SYS_HWMON = "/sys/class/hwmon"
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+def read(path, default="N/A"):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except Exception:
+        return default
+
+def read_int(path, default=0):
+    v = read(path, None)
+    if v is None:
+        return default
+    try:
+        return int(v)
+    except ValueError:
+        return default
+
+def bar(pct, width=20, color=G):
+    filled = int(width * pct / 100)
+    filled = max(0, min(width, filled))
+    if pct > 80:
+        color = R
+    elif pct > 50:
+        color = Y
+    return color + "█" * filled + DIM + "░" * (width - filled) + NC
+
+# ── GPU discovery ─────────────────────────────────────────────────────────────
+def find_mtt_cards():
+    cards = []
+    for card_path in sorted(glob.glob(f"{SYS_DRM}/card*")):
+        card = os.path.basename(card_path)
+        if "renderD" in card:
+            continue
+        dev_path = os.path.join(card_path, "device")
+        vendor = read(os.path.join(dev_path, "vendor"), "").lower()
+        if vendor != VENDOR_ID:
+            continue
+        device_id = read(os.path.join(dev_path, "device"), "0x0000")
+        cards.append({
+            "card": card,
+            "dev_path": dev_path,
+            "device_id": device_id,
+        })
+    return cards
+
+def find_hwmon(pci_addr):
+    """Find hwmon entry for a given PCI address (e.g. 0000:05:00.0)"""
+    for hwmon in glob.glob(f"{SYS_HWMON}/hwmon*"):
+        name = read(os.path.join(hwmon, "name"), "")
+        if name == "mtgpu":
+            # verify it belongs to the right PCI device
+            dev_link = os.path.join(hwmon, "device")
+            if os.path.islink(dev_link):
+                target = os.path.realpath(dev_link)
+                if pci_addr in target:
+                    return hwmon
+            else:
+                return hwmon  # only one mtgpu, safe to return
+    return None
+
+def find_pci_addr(dev_path):
+    """Resolve /sys/class/drm/cardN/device -> PCI address"""
+    try:
+        real = os.path.realpath(dev_path)
+        return os.path.basename(real)
+    except Exception:
+        return ""
+
+# ── data collection ───────────────────────────────────────────────────────────
+def collect_gpu_data(card_info, gpu_idx=0):
+    dev_path  = card_info["dev_path"]
+    pci_addr  = find_pci_addr(dev_path)
+    hwmon     = find_hwmon(pci_addr)
+
+    # VRAM
+    vram_total = read_int(os.path.join(dev_path, "mem_info_vram_total"), 0)
+    vram_used  = read_int(os.path.join(dev_path, "mem_info_vram_used"),  0)
+    vram_pct   = int(vram_used * 100 / vram_total) if vram_total > 0 else 0
+
+    # Utilisation from proc
+    gpu_busy = read_int(os.path.join(dev_path, "gpu_busy_percent"), 0)
+    mem_busy = read_int(os.path.join(dev_path, "mem_busy_percent"), 0)
+
+    # Temperature & power from hwmon
+    temp_mc  = read_int(os.path.join(hwmon, "temp1_input"), 0) if hwmon else 0
+    power_mw = read_int(os.path.join(hwmon, "power1_input"), 0) if hwmon else 0
+    fan_rpm  = read_int(os.path.join(hwmon, "fan1_input"), 0) if hwmon else 0
+
+    # proc interface
+    proc_gpu = os.path.join(PROC_ROOT, str(gpu_idx))
+    max_inst = read_int(os.path.join(proc_gpu, "max_inst"), 16)
+    policy   = read_int(os.path.join(proc_gpu, "policy"), 0)
+    version  = read(os.path.join(PROC_ROOT, "version"), "N/A")
+    cores    = read(os.path.join(PROC_ROOT, "cores"), "0")
+
+    # Device name from PCI
+    device_id = card_info["device_id"]
+    name_map  = {"0x0102": "MTT S30 (2-Core)", "0x0103": "MTT S30 (4-Core)"}
+    gpu_name  = name_map.get(device_id.lower(), f"MTT S30 [{device_id}]")
+
+    return {
+        "name":       gpu_name,
+        "card":       card_info["card"],
+        "pci":        pci_addr,
+        "driver":     "mtgpu_stub",
+        "version":    version,
+        "vram_total": vram_total,
+        "vram_used":  vram_used,
+        "vram_pct":   vram_pct,
+        "gpu_busy":   gpu_busy,
+        "mem_busy":   mem_busy,
+        "temp_c":     temp_mc // 1000,
+        "power_w":    power_mw // 1000,
+        "fan_rpm":    fan_rpm,
+        "max_inst":   max_inst,
+        "policy":     policy,
+        "cores":      cores,
+    }
+
+# ── display ───────────────────────────────────────────────────────────────────
+def fmt_bytes(b):
+    if b >= 1 << 30:
+        return f"{b / (1 << 30):.1f} GiB"
+    if b >= 1 << 20:
+        return f"{b / (1 << 20):.1f} MiB"
+    return f"{b} B"
+
+def render_once(gpus_data, timestamp):
+    lines = []
+    lines.append(f"{W}{'─'*70}{NC}")
+    lines.append(f"{W}  Moore Threads MTT S30 GPU Monitor{NC}  {DIM}{timestamp}{NC}")
+    lines.append(f"{W}{'─'*70}{NC}")
+
+    for i, g in enumerate(gpus_data):
+        lines.append(f"  {C}GPU {i}{NC}  {W}{g['name']}{NC}  "
+                     f"{DIM}[{g['card']} | {g['pci']} | driver: {g['driver']} v{g['version']}]{NC}")
+        lines.append("")
+
+        # Utilisation
+        lines.append(f"  {Y}GPU Util  {NC}{bar(g['gpu_busy'])}  {W}{g['gpu_busy']:3d}%{NC}")
+        lines.append(f"  {Y}Mem Util  {NC}{bar(g['mem_busy'])}  {W}{g['mem_busy']:3d}%{NC}")
+
+        # VRAM
+        vram_str = f"{fmt_bytes(g['vram_used'])} / {fmt_bytes(g['vram_total'])}"
+        lines.append(f"  {Y}VRAM      {NC}{bar(g['vram_pct'])}  {W}{vram_str}{NC}")
+        lines.append("")
+
+        # Sensors
+        temp_color = R if g['temp_c'] > 85 else Y if g['temp_c'] > 70 else G
+        lines.append(f"  {DIM}Temp:{NC}  {temp_color}{g['temp_c']:3d} °C{NC}   "
+                     f"{DIM}Power:{NC}  {W}{g['power_w']:3d} W{NC}   "
+                     f"{DIM}Fan:{NC}  {W}{g['fan_rpm']} RPM{NC}")
+
+        # Scheduler info
+        policy_names = {0: "time-sharing", 1: "exclusive", 2: "MIG-like"}
+        policy_str = policy_names.get(g['policy'], str(g['policy']))
+        lines.append(f"  {DIM}Max instances:{NC} {W}{g['max_inst']}{NC}   "
+                     f"{DIM}Scheduler:{NC} {W}{policy_str}{NC}   "
+                     f"{DIM}Active cores:{NC} {W}{g['cores']}{NC}")
+        lines.append("")
+
+    lines.append(f"{W}{'─'*70}{NC}")
+    lines.append(f"  {DIM}Press Ctrl+C to exit{NC}")
+    return "\n".join(lines)
+
+# ── main ──────────────────────────────────────────────────────────────────────
+def main():
+    parser = argparse.ArgumentParser(description="MTT S30 GPU Monitor")
+    parser.add_argument("--once",     action="store_true", help="Print once and exit")
+    parser.add_argument("--json",     action="store_true", help="JSON output")
+    parser.add_argument("--interval", type=float, default=1.0, help="Refresh interval (seconds)")
+    args = parser.parse_args()
+
+    cards = find_mtt_cards()
+    if not cards:
+        print(f"{R}No Moore Threads GPU found.{NC}")
+        print(f"  Check: lspci | grep -i moore")
+        print(f"  Check: lsmod | grep mtgpu_stub")
+        sys.exit(1)
+
+    def collect_all():
+        return [collect_gpu_data(c, i) for i, c in enumerate(cards)]
+
+    if args.json:
+        data = collect_all()
+        print(json.dumps(data, indent=2))
+        return
+
+    if args.once:
+        data = collect_all()
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        print(render_once(data, ts))
+        return
+
+    # Live TUI
+    signal.signal(signal.SIGINT, lambda s, f: (print(f"\n{NC}"), sys.exit(0)))
+    try:
+        while True:
+            data = collect_all()
+            ts   = time.strftime("%Y-%m-%d %H:%M:%S")
+            sys.stdout.write(CLEAR)
+            sys.stdout.write(render_once(data, ts))
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        print(NC)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,81 @@
+# Build outputs
+*.o
+*.ko
+*.module
+*.order
+*.symvers
+*.toc
+*.cmd
+
+# Kernel module builds
+Module.symvers
+modules.order
+.cpupkcs
+.vcpkgding
+
+# Objects
+*.relo
+
+# Shared objects
+*.so
+*.so.*
+
+# Libraries
+*.a
+*.lib
+
+# RPMbuild outputs
+*.rpm
+*.srpm
+debuginfo/
+
+# DKMS
+var/lib/dkms/
+
+# Firmware (in development - may need to include later)
+/firmware/mthreads/*.bin
+/firmware/mthreads/*.dat
+
+# OS
+.DS_Store
+Thumbs.db
+*~
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+*.egg
+build/
+dist/
+venv/
+.venv/
+env/
+
+# CMake
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+
+# Logs
+*.log
+logs/
+
+# Temporary
+*.tmp
+temp/
+tmp/
