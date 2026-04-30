@@ -51,17 +51,17 @@ Supported GPUs:
 
 %install
 # Install firmware directory
-install -d %{buildroot}%{_firmwaredir}/mthreads
+install -d %{buildroot}/usr/lib/firmware/mthreads
 
 # Install firmware files
 install -m 644 firmware/mthreads/musa.fw.1.0.0.0 \
-    %{buildroot}%{_firmwaredir}/mthreads/musa.fw.1.0.0.0
+    %{buildroot}/usr/lib/firmware/mthreads/musa.fw.1.0.0.0
 install -m 644 firmware/mthreads/musa.fw.1.1.0.0 \
-    %{buildroot}%{_firmwaredir}/mthreads/musa.fw.1.1.0.0
+    %{buildroot}/usr/lib/firmware/mthreads/musa.fw.1.1.0.0
 install -m 644 firmware/mthreads/musa.fw.2.0.0.0 \
-    %{buildroot}%{_firmwaredir}/mthreads/musa.fw.2.0.0.0
+    %{buildroot}/usr/lib/firmware/mthreads/musa.fw.2.0.0.0
 install -m 644 firmware/mthreads/musa.sh.1.0.0.0 \
-    %{buildroot}%{_firmwaredir}/mthreads/musa.sh.1.0.0.0
+    %{buildroot}/usr/lib/firmware/mthreads/musa.sh.1.0.0.0
 
 %pre
 # Nothing to do in pre-install
@@ -95,10 +95,10 @@ fi
 %doc README.md docs/
 
 # Firmware files
-%{_firmwaredir}/mthreads/musa.fw.1.0.0.0
-%{_firmwaredir}/mthreads/musa.fw.1.1.0.0
-%{_firmwaredir}/mthreads/musa.fw.2.0.0.0
-%{_firmwaredir}/mthreads/musa.sh.1.0.0.0
+/usr/lib/firmware/mthreads/musa.fw.1.0.0.0
+/usr/lib/firmware/mthreads/musa.fw.1.1.0.0
+/usr/lib/firmware/mthreads/musa.fw.2.0.0.0
+/usr/lib/firmware/mthreads/musa.sh.1.0.0.0
 
 %changelog
 * Tue Apr 30 2024 Moore Threads <mt-sw-cloudcomputing@mthreads.com> - 1.1.1-1

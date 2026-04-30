@@ -117,6 +117,7 @@ fi
 /usr/src/%{name}-%{version}/kernel/src/*.h
 /usr/src/%{name}-%{version}/kernel/src/Makefile
 /usr/src/%{name}-%{version}/kernel/src/dkms.conf
+/usr/src/%{name}-%{version}/dkms.conf
 /usr/src/%{name}-%{version}/mtgpu.h
 /usr/src/%{name}-%{version}/mtgpu_errors.h
 /usr/src/%{name}-%{version}/version.h
