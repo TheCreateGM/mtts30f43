@@ -1,0 +1,1 @@
+./mtgpu_stub.o

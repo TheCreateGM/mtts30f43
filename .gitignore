@@ -62,20 +62,6 @@ venv/
 .venv/
 env/
 
-# Kernel module generated files
-*.mod
-*.mod.c
-*.mod.o
-
-# Driver/ build artifacts
-Driver/build/
-Driver/kernel/src/*.o
-Driver/kernel/src/*.ko
-Driver/kernel/src/Module.symvers
-Driver/kernel/src/modules.order
-Driver/userspace/mtt-tool/mtt-tool
-Driver/userspace/*.o
-
 # CMake
 CMakeLists.txt.user
 CMakeCache.txt
@@ -93,4 +79,3 @@ logs/
 *.tmp
 temp/
 tmp/
-.logs
