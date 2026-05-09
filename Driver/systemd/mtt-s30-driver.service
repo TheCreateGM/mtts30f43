@@ -1,0 +1,17 @@
+[Unit]
+Description=Moore Threads MTT S30 GPU Driver
+Documentation=https://developer.mthreads.com/
+After=systemd-modules-load.service
+Before=display-manager.service
+ConditionPathExists=/sys/bus/pci/devices/*/vendor
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/sbin/modprobe mtgpu_stub
+ExecStart=/sbin/modprobe sgpu_km
+ExecStop=/sbin/modprobe -r sgpu_km
+ExecStop=/sbin/modprobe -r mtgpu_stub
+
+[Install]
+WantedBy=multi-user.target

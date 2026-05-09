@@ -1,0 +1,19 @@
+# Moore Threads MTT S30 GPU udev rules
+# Installed to /etc/udev/rules.d/99-mtt-s30.rules
+#
+# Copyright © 2022-2024 Moore Threads Inc. All rights reserved.
+
+# DRM device nodes
+SUBSYSTEM=="drm", KERNEL=="card*", ATTRS{vendor}=="0x1ed5", GROUP="video", MODE="0660"
+SUBSYSTEM=="drm", KERNEL=="renderD*", ATTRS{vendor}=="0x1ed5", GROUP="render", MODE="0660"
+
+# MTGPU devices (stub driver)
+SUBSYSTEM=="mtgpu", GROUP="video", MODE="0660"
+KERNEL=="mtgpu.*", GROUP="video", MODE="0660"
+
+# sGPU control devices
+KERNEL=="sgpu-km", GROUP="video", MODE="0660"
+KERNEL=="sgpu-km-ctl", GROUP="video", MODE="0660"
+
+# Legacy alias
+SUBSYSTEM=="sgpu", GROUP="video", MODE="0660"
